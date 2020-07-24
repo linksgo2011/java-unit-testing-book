@@ -10,6 +10,10 @@ public class User implements Serializable {
     private Instant createAt;
     private Instant updateAt;
 
+
+    public User() {
+    }
+
     public User(long id, String username, String password, Instant createAt, Instant updateAt) {
         this.id = id;
         this.username = username;
