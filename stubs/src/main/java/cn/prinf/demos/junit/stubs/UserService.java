@@ -14,7 +14,7 @@ public class UserService {
     public void register(User user) {
         user.setPassword(encryptionService.sha256(user.getPassword()));
 
-        userRepository.savedUser(user);
+        userRepository.saveUser(user);
 
         String emailSubject = "Register Notification";
         String emailContent = "Register Account successful! your username is " + user.getUsername();

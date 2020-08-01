@@ -104,8 +104,6 @@ verify(mockedEmailService).sendEmail(
 
 这里使用了，eq 方法进行对比，需要注意的是 eq 方法和 assertThat 中的 equalTo 不太一样。这里是对参数进行验证，eq 方法来自于 ArgumentMatchers 对象，需要特别注意。
 
-
-
 除了 eq 之外还有一些常用的验证器：
 
 - notNull 非空校验
@@ -115,12 +113,68 @@ verify(mockedEmailService).sendEmail(
 - matches 正则校验，比较常用
 - startsWith、endsWith 字符串比较
 
+### verify 传入下游的参数对象
 
+上面我们验证了邮件发送的内容是否符合我们的预期，但是并没有验证传入 userRepository.saveUser 的内容是否按照我们的预期进行。
 
-### verify 比较对象
+因此我们不仅需要验证 saveUser 方法的调用次数还需要验证传入的对象。在 java 中，如果修改了一个对象的属性值，我们只是比较一个对象的引用无法起到作用。所以在 verify 时，可以捕捉到传入的参数，再通过前面介绍的断言来完成验证。
 
-上面的 verify 
+```java
+ArgumentCaptor<User> argument = ArgumentCaptor.forClass(User.class);
+verify(mockedUserRepository).saveUser(argument.capture());
 
+assertEquals("admin@test.com", argument.getValue().getEmail());
+assertEquals("admin", argument.getValue().getUsername());
+```
+
+通过 ArgumentCaptor 构建一个 argument 对象，并捕捉参数，再用于断言即可。
+
+### 修改 mock 对象的行为 
+
+在 register 方法中，我们通过 encryptionService.sha256 来进行密码的 HASH。在单元测试中，我们可以 mock 了 encryptionService 方法。默认情况下调用被 mock 对象的方法会返回 null。
+
+因此为了测试各种行为，我们需要让 mock 按照我们的意图返回数据。
+
+```java 
+given(mockedEncryptionService.sha256(any())).willReturn("cd2eb0837c9b4c962c22d2ff8b5441b7b45805887f051d39bf133b583baf6860");
+```
+
+通过 given ... willReturn 语句可以修改被 mock 的方法被调用时候的返回。除了 willReturn 方法之外，还可以做一些别的操作。
+
+- willThrow 丢出一个异常
+- willCallRealMethod 调用原始的方法
+- will 传入一个 lambda 可以通过程序式的完成更多操作
+
+另外值得一提的是给 sha256 传入的 any() 方法，这里又是参数匹配器，用来匹配是否满足修改 mock 行为的条件。any 任何参数都满足,any(Class<T> type) 指定传入一个类型时才满足。同样的 eq、contains 等 ArgumentMatchers 中的方法都可以使用。
+
+### 使用 spy 
+
+如果项目中对象很多，大量使用 mock 的工作量非常大。如果对象 B 依赖 A，对象 A 已经经过了单元测试，可以认为 A 是可以信任的。A 的结果可以在某些情况下直接用于测试，并不影响测试正确性。
+
+这个时候可以使用 spy，spy 方法相当于对需要依赖的方法进行代理，不改变原来的逻辑的情况，能实现对它的行为进行修改。可以说 spy 是一种特殊的 mock。
+
+例如我们给 sha256 方法一个真实的实现：
+
+```java
+public String sha256(String text) {
+    MessageDigest md = null;
+    try {
+        md = MessageDigest.getInstance("SHA-256");
+        return new BigInteger(1, md.digest(text.getBytes())).toString(16);
+    } catch (NoSuchAlgorithmException e) {
+        e.printStackTrace();
+    }
+    return null;
+}
+```
+
+在 register 的单元测试中，修改对 EncryptionService 类的 mock 为 spy，并删除对 mockedEncryptionService 的 given 操作。
+
+```java
+EncryptionService mockedEncryptionService = spy(EncryptionService.class);
+```
+
+我们重新运行测试，可以得到和上一步同样的测试结果。使用 spy 可以大大减少测试样板代码和重复工作。
 
 
 
