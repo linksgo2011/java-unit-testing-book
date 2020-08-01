@@ -1,5 +1,9 @@
 # 测试替身: Mock、Spy、Stub
 
+
+
+## Test Double 简介
+
 对于一个应用程序或者一个系统而言，很难给你一个纯粹的类进行单元测试。对象之间的依赖往往交织到一起，需要拆成各个单元才能逐个击破，也是单元测试的目的。
 
 需要将这些交织到一起的对象拆开，需要一些工具，例如模拟一些数据、替换一些具有某些特定行为的类等。  网站 xunitpatterns.com 把这些工具称为 Test Double，翻译过来就是”测试替身“。
@@ -18,13 +22,21 @@ Martin Fowler 为了让这些概念更容易理解，在他的网站上重新更
 
 ![image-20200801172903965](test-double/image-20200801172903965.png)
 
-下面我们使用 Mokito 来测试依赖关系复杂的对象。
+下面我们使用 mockito 来测试依赖关系复杂的对象。
 
-## Mokito 基本用法
+## mockito 介绍
 
-Mokito 最常用的方法是 mock、spy 两个方法，大部分工作都可以通过这两个静态方法完成。mock 方法输入一个需要模拟的类型，Mokito 会帮你构造一个模拟对象，并提供一系列方法操控生成的 mock 对象，例如根据参数返回特定的值、丢出异常、验证这个 mock 对象中的方法是否被调用，以何种参数调用。
+![img](test-double/u=2605130480,1231059774&fm=15&gp=0.jpg)
 
-### 使用 Mock
+mockito 的 logo 的是一杯莫尼托鸡尾酒，来源于 mock 的谐音。
+
+mockito 是一个非常易用的 mock 框架。可以通过干净、流式的 API 编写出容易阅读的测试代码。mockito 和 Junit4 配合的非常完美，在 StackOverflow 投票中排名较高，另外也是 github 中引用占比非常高的一个框架。
+
+mockito 最常用的方法是 mock、spy 两个方法，大部分工作都可以通过这两个静态方法完成。mock 方法输入一个需要模拟的类型，mockito 会帮你构造一个模拟对象，并提供一系列方法操控生成的 mock 对象，例如根据参数返回特定的值、丢出异常、验证这个 mock 对象中的方法是否被调用，以何种参数调用。
+
+选择 mockito 的另外一个原因还在于它的生态和拓展性，在后面我们会逐步介绍一些静态方法、私有方法的模拟和测试。可以借用 powermock 来完成，powermock 和 mockito 能很好的协作。
+
+## 使用 mock
 
 在实例代码中的 stubs  模块中有一个 UserService 对象，用来演示用户注册的逻辑。在 register 方法中，注册的过程有密码 HASH、数据持久化、发送邮件三个主要流程，实际的注册方法必然更加复杂。这里做了大量简化，让我们关注于单元测试。
 
@@ -53,20 +65,20 @@ public class UserService {
 }
 ```
 
-为了演示 Mokito 基本的使用方法，这里没有使用 Spring 框架，需要自己通过构造函数组织对象依赖关系。
+为了演示 mockito 基本的使用方法，这里没有使用 Spring 框架，需要自己通过构造函数组织对象依赖关系。
 
 我们的测试目标是 register 方法，和之前的示例不同，这里的被测试方法没有返回值，如果没有发生异常就代表功能和逻辑正常，因此无法根据返回值断言。另外，这个方法中会去调用其他对象，这在依赖关系如网状的现实对象依赖关系中不算什么。
 
 UserService 的构造方法需要传入 userRepository、emailService、encryptionService 三个对象，否则无法工作。
 
-我们来编写一个测试，并使用 Mokito 创建我们需要的下游对象。
+我们来编写一个测试，并使用 mockito 创建我们需要的下游对象。
 
 ```java
 public class UserServiceTest {
 
     @Test
     public void should_register() {
-        // 使用 mokito 模拟三个对象
+        // 使用 mockito 模拟三个对象
         UserRepository mockedUserRepository = mock(UserRepository.class);
         EmailService mockedEmailService = mock(EmailService.class);
         EncryptionService mockedEncryptionService = mock(EncryptionService.class);
@@ -113,7 +125,7 @@ verify(mockedEmailService).sendEmail(
 - matches 正则校验，比较常用
 - startsWith、endsWith 字符串比较
 
-### verify 传入下游的参数对象
+## verify 传入下游的参数对象
 
 上面我们验证了邮件发送的内容是否符合我们的预期，但是并没有验证传入 userRepository.saveUser 的内容是否按照我们的预期进行。
 
@@ -129,7 +141,7 @@ assertEquals("admin", argument.getValue().getUsername());
 
 通过 ArgumentCaptor 构建一个 argument 对象，并捕捉参数，再用于断言即可。
 
-### 修改 mock 对象的行为 
+## 修改 mock 对象的行为 
 
 在 register 方法中，我们通过 encryptionService.sha256 来进行密码的 HASH。在单元测试中，我们可以 mock 了 encryptionService 方法。默认情况下调用被 mock 对象的方法会返回 null。
 
@@ -147,7 +159,7 @@ given(mockedEncryptionService.sha256(any())).willReturn("cd2eb0837c9b4c962c22d2f
 
 另外值得一提的是给 sha256 传入的 any() 方法，这里又是参数匹配器，用来匹配是否满足修改 mock 行为的条件。any 任何参数都满足,any(Class<T> type) 指定传入一个类型时才满足。同样的 eq、contains 等 ArgumentMatchers 中的方法都可以使用。
 
-### 使用 spy 
+## 使用 spy 
 
 如果项目中对象很多，大量使用 mock 的工作量非常大。如果对象 B 依赖 A，对象 A 已经经过了单元测试，可以认为 A 是可以信任的。A 的结果可以在某些情况下直接用于测试，并不影响测试正确性。
 
@@ -178,14 +190,79 @@ EncryptionService mockedEncryptionService = spy(EncryptionService.class);
 
 
 
-# 测试静态、私有方法
+## 使用注解
+
+如果每次都编写 mock、spy 方法来创建我们的模拟对象，会显得冗长且不易阅读。修改需要模拟的三个对象，使用注解代替手动创建
+
+```java
+@Mock
+UserRepository mockedUserRepository;
+@Mock
+EmailService mockedEmailService;
+@Spy
+EncryptionService mockedEncryptionService;
+```
+
+如果只是加上注解，测试方法并不知道这个测试类需要处理注解，并初始化 mock 行为。因此需要在测试类上添加一个 Runner 来运行。
+
+```java
+@RunWith(MockitoJUnitRunner.class)
+```
+
+Runner 的作用是在测试前处理一些环节准备的工作，例如初始化注解，准备上下文等。MockitoJunitRunner 做的事情非常简单，其中和注解初始话相关的逻辑就是 
+
+```java
+MockitoAnnotations.initMocks(UserServiceAnnotationTest.class);
+```
+
+目前为止想要充分利用 mockito 的特性可以使用 MockitoJUnitRunner，以后还可以使用 PowerMockRunner 来配合 PowerMock 的使用，以及 SpringRunner 配合 Spring 的使用。
 
 
 
-## powermock 入门
+```java
 
+@RunWith(MockitoJUnitRunner.class)
+public class UserServiceAnnotationTest {
 
+    @Mock
+    UserRepository mockedUserRepository;
+    @Mock
+    EmailService mockedEmailService;
+    @Spy
+    EncryptionService mockedEncryptionService;
 
+    @Test
+    public void should_register() {
 
+        UserService userService = new UserService(mockedUserRepository, mockedEmailService, mockedEncryptionService);
+        // given
+        User user = new User("admin@test.com", "admin", "xxx");
 
-## 神奇的 whitebox
+        // when
+        userService.register(user);
+
+        // then
+        verify(mockedEmailService).sendEmail(
+                eq("admin@test.com"),
+                eq("Register Notification"),
+                eq("Register Account successful! your username is admin"));
+
+        ArgumentCaptor<User> argument = ArgumentCaptor.forClass(User.class);
+        verify(mockedUserRepository).saveUser(argument.capture());
+
+        assertEquals("admin@test.com", argument.getValue().getEmail());
+        assertEquals("admin", argument.getValue().getUsername());
+        assertEquals("cd2eb0837c9b4c962c22d2ff8b5441b7b45805887f051d39bf133b583baf6860", argument.getValue().getPassword());
+    }
+}
+```
+
+## reset mock
+
+如果需要在一个测试方法中反复修改 mock 对象的行为，以及重复验证 mock 的方法次数，mock 对象会有状态存在，会干扰测试。
+
+可以使用 reset 方法清理掉 mock 上的状态。
+
+```java
+reset(mockedUserRepository)
+```
