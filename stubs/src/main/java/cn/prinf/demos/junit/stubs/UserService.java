@@ -3,16 +3,16 @@ package cn.prinf.demos.junit.stubs;
 public class UserService {
     private UserRepository userRepository;
     private EmailService emailService;
-    private EncryptionService encryption;
+    private EncryptionService encryptionService;
 
-    public UserService(UserRepository userRepository, EmailService emailService, EncryptionService encryption) {
+    public UserService(UserRepository userRepository, EmailService emailService, EncryptionService encryptionService) {
         this.userRepository = userRepository;
         this.emailService = emailService;
-        this.encryption = encryption;
+        this.encryptionService = encryptionService;
     }
 
     public void register(User user) {
-        user.setPassword(encryption.sha256(user.getPassword()));
+        user.setPassword(encryptionService.sha256(user.getPassword()));
 
         userRepository.savedUser(user);
 

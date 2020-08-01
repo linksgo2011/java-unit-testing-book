@@ -26,5 +26,7 @@ public class UserServiceTest {
                 eq("admin@test.com"),
                 eq("Register Notification"),
                 eq("Register Account successful! your username is admin"));
+
+        //verify(mockedUserRepository).savedUser();
     }
 }
