@@ -1,6 +1,6 @@
 - [前言](README.md)
 - [Java 单元测试基础](java-unit-test-basic.md)
-- [测试替身: Mock、Spy、Stub](stubs.md)
+- [测试替身: Mock、Spy、Stub](test-double.md)
 - [为 Spring boot 项目编写单元测试](testing-with-spring-boot.md)
 - [测试守护重构](testing-with-refacting.md)
 - [测试驱动设计（TDD）](tdd-basic.md)
@@ -9,3 +9,4 @@
 - [单元测试高级](testing-advance.md)
 - [疑难杂症](trouble-shooting.md)
 - [参考资料和致谢](references.md)
+
