@@ -219,6 +219,14 @@ MockitoAnnotations.initMocks(UserServiceAnnotationTest.class);
 
 
 
+另外，我们拿到 mock 对象还需要注入到被测试类中，代替构造方法。mockito 提供了 @InjectMocks 注解来完成这部分工作。
+
+
+
+使用注解完整的测试代码如下，也可以在示例代码仓库中找到。
+
+
+
 ```java
 
 @RunWith(MockitoJUnitRunner.class)
@@ -230,11 +238,11 @@ public class UserServiceAnnotationTest {
     EmailService mockedEmailService;
     @Spy
     EncryptionService mockedEncryptionService;
+    @InjectMocks
+    UserService userService;
 
     @Test
     public void should_register() {
-
-        UserService userService = new UserService(mockedUserRepository, mockedEmailService, mockedEncryptionService);
         // given
         User user = new User("admin@test.com", "admin", "xxx");
 

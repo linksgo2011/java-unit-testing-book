@@ -12,5 +12,6 @@
         <module>spring</module>
         <module>stubs</module>
         <module>single</module>
+        <module>powermock</module>
     </modules>
 </project>
