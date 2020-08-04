@@ -36,10 +36,10 @@ public class UserServiceAnnotationTest {
 
     @Test
     public void should_register() {
-        Instant moment = Instant.ofEpochSecond(1596494464);
+        Instant now = Instant.ofEpochSecond(1596494464);
 
         PowerMockito.mockStatic(Instant.class);
-        PowerMockito.when(Instant.now()).thenReturn(moment);
+        PowerMockito.when(Instant.now()).thenReturn(now);
 
         // given
         User user = new User("admin@test.com", "admin", "xxx", null);
@@ -59,6 +59,6 @@ public class UserServiceAnnotationTest {
         assertEquals("admin@test.com", argument.getValue().getEmail());
         assertEquals("admin", argument.getValue().getUsername());
         assertEquals("cd2eb0837c9b4c962c22d2ff8b5441b7b45805887f051d39bf133b583baf6860", argument.getValue().getPassword());
-        assertEquals(moment, argument.getValue().getCreateAt());
+        assertEquals(now, argument.getValue().getCreateAt());
     }
 }

@@ -19,6 +19,10 @@ public class UserService {
 
         userRepository.saveUser(user);
 
+        sendEmail(user);
+    }
+
+    private void sendEmail(User user) {
         String emailSubject = "Register Notification";
         String emailContent = "Register Account successful! your username is " + user.getUsername();
         emailService.sendEmail(user.getEmail(), emailSubject, emailContent);
