@@ -24,6 +24,10 @@ Martin Fowler 为了让这些概念更容易理解，在他的网站上重新更
 
 下面我们使用 mockito 来测试依赖关系复杂的对象。
 
+
+
+本节示例代码：https://github.com/linksgo2011/java-unit-testing-book/tree/master/stubs
+
 ## mockito 介绍
 
 ![img](test-double/u=2605130480,1231059774&fm=15&gp=0.jpg)

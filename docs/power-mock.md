@@ -10,6 +10,8 @@ mockito 已经很强大，能帮我们完成大部分 mock 工作，但是对于
 
 配合 mockito 使用的另外一个框架是 powermock。它采用了字节码技术，可以增强测试，解决 mock 静态、私有方法，以及必要时测试静态、私有方法。
 
+本节示例代码：https://github.com/linksgo2011/java-unit-testing-book/tree/master/powermock
+
 ## powermock 入门
 
 为了便于演示，我给上一部分的例子中的 User 对象增加了 createAt 字段，createAt 字段在 register 方法内被填充，然后进行持久化。
