@@ -242,4 +242,3 @@ ReflectionTestUtils.invokeMethod(student, "saveOrUpdate", "From Unit test");
 1. 使用 powermock 对私有方法、属性进行 mock 和验证
 2. 使用包级别可访问的策略对私有方法进行改造，使其可被测试
 3. 使用反射工具，例如 Whitebox、ReflectionTestUtils、FieldSetter 访问私有属性和方法
-

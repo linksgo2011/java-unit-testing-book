@@ -8,4 +8,5 @@
 - Junit 官方网站 https://junit.org
 - Hamcrest 断言库 http://hamcrest.org/JavaHamcrest/
 - Mockito 官网 https://site.mockito.org/
-- Spring boot 测试相关章节 https://docs.spring.io/spring-boot/docs/1.5.7.RELEASE/reference/html/boot-features-testing.html
+- Spring boot 测试相关章节 https://docs.spring.io/spring-boot/docs/2.1.7.RELEASE/reference/htmlsingle/
+
