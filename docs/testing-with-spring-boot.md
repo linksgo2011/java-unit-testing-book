@@ -282,8 +282,6 @@ public class UserControllerTest {
 
 #### 对 Bean 的 Mock 和 Spy
 
-
-
 Mock 和 Spy 相关注解的使用和 Runner 密切相关，在 SpringBoot 的项目中，想使用 Spring Test 提供的相关工具，一般我们都是用 SpringRunner。对象之间的依赖是通过 Bean 完成的，而不是简单的赋值。所以在 SpringRunner 中需要使用 @MockBean 而不是 @Mock。
 
 @MockBean 注解内部依然是创建的 Mokito 的 Mock 对象，不过是以 Bean 的方式存在，并以此初始话 ApplicationContext 上下文。@MockBean 被用于任何的测试类中的属性中，也可以被用于 @Configuration 修饰的类的属性上，用来准备测试配置。另外需要注意的是，SpringRunner 提供的 ApplicationContext 上下文会被缓存，从而节省测试的时间。使用 @MockBean 创建的对象会自动在测试完成后被重置，如果是自己创建的对象，需要注意是否会造成测试过程中的内存泄露。
@@ -334,17 +332,163 @@ MockHttpServletRequestBuilder 可以创建出 GET、POST、PUT、DELETE 等请�
 
 
 
-### Service 测试
+### Service + 内嵌基础设施测试
+
+如果对 service 进行测试 mock 掉基础设施做纯粹的单元测试完全没有问题，但是这样基础设施的特性并没有纳入测试范围，造成测试性价比低。权衡之下，现实项目中往往将基础设施通过内嵌的方式尽可能的参与到测试中，如果实在不能通过内嵌解决（例如一些云基础设施），则通过 Mock 处理。
+
+常见可以被内嵌处理的基础设施有数据库、Redis、MongoDB、Kafka 等。
+
+
+#### 内嵌数据库	
+
+内存数据库可以选择的有 HSQL、H2，H2 相对 HSQL 来说比较功能较为完整，但是稍慢。Spring Boot 对 h2 的支持也比较好，有相关的自动配置，以及被纳入版本管理器。
+
+在项目中加入相关依赖，并在测试的资源目录下增加相关配置即可。
+
+```java
+<dependency>
+    <groupId>com.h2database</groupId>
+    <artifactId>h2</artifactId>
+    <scope>test</scope>
+</dependency>
+```
+
+设置数据源连接串，并开启 h2 控制台。
+
+```java
+spring:
+  datasource:
+    url: jdbc:h2:mem:unit_testing_db
+  h2:
+    console:
+      enabled: true
+```
+
+h2 默认控制台访问路径是 /h2-console，可以通过 spring.h2.console.path 属性修改路径。实际上测试前和测试后控制台都不会有数据，可以通过断点中断测试，并访问 h2 控制台路径。
+
+如果使用了 flyway 等数据迁移工具，也会在测试启动时生效，由于 spring context 会有缓存，因此
+不会重复执行迁移任务。
+
+#### 内嵌 Redis
+
+当业务代码中使用了 Redis，如果 Mock 掉 Redis 的客户端，相关特性测试不到，测试性价比降低。也可以通过内嵌 Redis 来完成测试，来加快测试效率。
+
+目前 Spring Boot 没有支持内嵌 Redis 的自动配置，因此需要手动配置。
+
+```java
+<dependency>
+  <groupId>redis.embedded</groupId>
+  <artifactId>embedded-redis</artifactId>
+  <version>0.5</version>
+</dependency>
+```
+
+可以通过在测试基类中编写 setup 和 teardown 方法来设置内嵌 Redis。
+
+```java 
+public class SpringBaseTest {
+
+    private RedisServer redisServer;
+
+    @BeforeClass
+    public void setUp() throws Exception {
+        redisServer = new RedisServer(6379);
+        redisServer.start();
+    }
+
+    @AfterClass
+    public void tearDown() throws Exception {
+        redisServer.stop();
+    }
+}
+```
+
+#### 内嵌 Mongo
+
+Spring Boot 默认支持了坐标为 de.flapdoodle.embed:de.flapdoodle.embed.mongo 的内嵌 Mongo，提供了相关自动配置类，无需按照官方仓库示例在代码中配置内嵌 Mongo。
+
+只需要增加依赖，以及添加修改 yml 配置即可。
+
+```xml
+<dependency>
+	<groupId>de.flapdoodle.embed</groupId>
+	<artifactId>de.flapdoodle.embed.mongo</artifactId>
+	<version>2.2.1-SNAPSHOT</version>
+</dependency>
+```
+
+Spring Boot 通过 MongoAutoConfiguration 类初始化了内嵌 Mongo 以及 MongoClient 的配置，默认情况下使用随机端口，并对开发人员透明。
+
+如果希望修改端口，可以在测试静态资源下的 yml 文件，修改属性 spring.data.mongodb.port 即可。
 
 
 
 
-## 内嵌数据库	
 
-## 内嵌 Redis
+## 常用测试工具集
 
-## 鉴权处理
+spring-boot-test-starter 集成了spring-boot-test、spring-test、 Mockito、JsonPath 等库，提供了不少我们对我们测试非常有帮助的工具集。
 
 
-## 测试工具集
+### TestPropertyValues
+一般来说很多被注解 @Value 修饰的属性都是私有的，这样对测试造成困难。Spring Boot 提供了 TestPropertyValues 用来注入配置属性。
+
+> TestPropertyValues.of("org=Spring", "name=Boot").applyTo(env);
+
+这里的 env 对象通过，@Autowire 注入即可。
+
+
+### OutputCapture 
+如果代码中使用了 System.out 或者 System.err 输出信息到控制台，通过 junit 自带的机制捕获比较麻烦，Spring Boot 提供了 OutputCapture 用于捕获控制台信息。
+
+```
+public class MyTest {
+
+	@Rule
+	public OutputCapture capture = new OutputCapture();
+
+	@Test
+	public void testName() throws Exception {
+		System.out.println("Hello World!");
+		assertThat(capture.toString(), containsString("World"));
+	}
+}
+```
+
+
+### JdbcTestUtils
+
+JdbcTestUtils 是 Spring Test 库中非常实用的工具，用于在测试过程中操作、统计表中的数据。JdbcTestUtils 需要传入一个 JdbcTemplate，作为实际操作数据库的渠道。
+
+- countRowsInTable(..)、countRowsInTableWhere(..): 统计给定数据库表的行数
+- deleteFromTables(..)、deleteFromTableWhere(..): 清除给定表中的数据
+- dropTables(..): 删除给定表
+
+
+### ReflectionTestUtils
+
+在测试中不可避免的需要对私有属性、方法进行操作，可以使用 PowerMock 等工具来完成。其实 Spring Test 库也内置了一个工具，通过反射简化此类操作。
+
+- getField(...)
+- setField(...)
+- invokeMethod(...)
+
+
+
+## 总结
+
+使用 Spring Boot 会让测试的环境搭建大大简化，这都归功于：spring-boot-test、spring-boot-autoconfigure、spring-test 这三个包，一些 mock 注解和工具由 Spring Test 和 Mockito 共同提供。
+
+但又是如此让 Spring Boot 环境中的各种测试工具变得难以理解，造成一些奇怪的问题。我们在使用的过程中需要注意相关的特性都是由哪一个具体的组件提供，这样排查问题会高效很多。
+
+在 Java 开发中，纯粹的单元测试往往更适合公共库、框架类的代码。对于应用程序来说，不得不和很多基础设施打交道，因此单元测试需要 Mock 大量的类和组件，却收益甚微。考虑通过内嵌基础设施的方式，局部进行集成测试，可以有效减少测试代码，节省大量编码时间。
+
+
+
+
+
+
+
+
+
 
