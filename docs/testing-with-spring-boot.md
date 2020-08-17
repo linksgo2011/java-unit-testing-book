@@ -215,20 +215,135 @@ public class MyControllerTests {
 
 
 
-## 加载 classpath 中的资源 
+## 分层测试和测试策略
+
+Spring Boot 项目一般会分为 Controller、Service、Repository 三层，在编写单元测试时，需要考虑分层隔离测试。
+
+如果我们每层都编写单元测试，会出现大量无意义的样板代码。如果不分层测试，为了达到相同而效果需要编写的用例组合就越多，因此我们需要考虑好分层测试的策略问题。
+
+Repository 实际上由 JPA 或者 Mybatis 这类框架完成，实际上可以不需测试。值得测试的是 Controller 和 Service 层。如果代码耦合足够低，大量的业务逻辑在 Service 层，而非 Controller 层，所以我们常常将测试的焦点锁定在 Service 层。
+
+另外一种声音是单元测试应该严格遵守分层测试原则，JPA 的 Repository 或者 Mybatis 的 Mapper 应该被单独测试否则测试不够单元。这种说法无可厚非，但是现实中 Repository 和 Mapper 的通用性很难做的很高，且大量代码都是和 Service 绑定的。所以对 Spring Boot 的测试策略建议如下：
+
+- Controller 层测试。使用 MockMVC 测试控制器相关逻辑是否正确，包括输出格式、头部和异常等。Controller 层测试不要直接 new Controller 对象，这样测试不到大量的注解，也不启动真正的 WebServer，而是使用 MockMVC 代替。
+- Service 层 + 持久层。使用 @JapDataTest 或者 @MybatisTest 自动配置数据库连接，数据库使用 H2 等内存数据库。对于测试数据而言，不直接创建数据库中的数据，而是使用上游方法操作数据。比如测试用户列出方法，应该先确保用户添加方法没有问题，然后使用用户添加方法创建数据库中的用户，这样可以减少成本。
+
+<img src="testing-with-spring-boot/image-20200816101012965.png" alt="image-20200816101012965" style="zoom:50%;" />
+
+在 MVC 项目中编写两种单元测试就够了，我们先来看下对控制器的 MockMVC 测试。
+
+### MockMVC 测试
+
+如果我们只关注 Controller 的测试，MockMVC 是非常好的选择。使用起来非常简单，只需要使用下面两个注解即可：
+
+```java
+@RunWith(SpringRunner.class)
+@WebMvcTest(UserController.class)
+```
+
+@WebMvcTest 启动相应的 Bean 并把 UserController 加入模拟的 RequestMapping。MockMVC 测试过程中不会发起真实的 Http 请求，因此我们需要注入一个 MockMvc 对象来构造请求。
+
+同时，@WebMvcTest 不会启动整个应用上下文，UserController 依赖的 Service 没有初始化，因此需要使用 @MockBean  来进行 Mock，否则会报 Bean 找不到的错误。得到 Mock 对象后，可以用 Mokito 内部的 given 等静态方法进行操作，定义返回值等。
+
+最后，我们需要使用 MockMvc 的实例构建请求、发送请求并验证返回值。
+
+完整的 例子如下：
+
+```java
+@RunWith(SpringRunner.class)
+@WebMvcTest(UserController.class)
+public class UserControllerTest {
+
+    @Autowired
+    private MockMvc mvc;
+
+    @MockBean
+    private UserService userService;
+
+    @Test
+    public void should_list_users() throws Exception {
+        given(userService.listAll()).willReturn(
+                Arrays.asList(new User() {{
+                    setId(01L);
+                    setUsername("Test user");
+                    setPassword("123456");
+                    setCreateAt(Instant.now());
+                    setUpdateAt(Instant.now());
+                }})
+        );
+
+        this.mvc.perform(get("/users").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+    }
+}
+```
+
+
+
+#### 对 Bean 的 Mock 和 Spy
+
+
+
+Mock 和 Spy 相关注解的使用和 Runner 密切相关，在 SpringBoot 的项目中，想使用 Spring Test 提供的相关工具，一般我们都是用 SpringRunner。对象之间的依赖是通过 Bean 完成的，而不是简单的赋值。所以在 SpringRunner 中需要使用 @MockBean 而不是 @Mock。
+
+@MockBean 注解内部依然是创建的 Mokito 的 Mock 对象，不过是以 Bean 的方式存在，并以此初始话 ApplicationContext 上下文。@MockBean 被用于任何的测试类中的属性中，也可以被用于 @Configuration 修饰的类的属性上，用来准备测试配置。另外需要注意的是，SpringRunner 提供的 ApplicationContext 上下文会被缓存，从而节省测试的时间。使用 @MockBean 创建的对象会自动在测试完成后被重置，如果是自己创建的对象，需要注意是否会造成测试过程中的内存泄露。
+
+同样的如果一个 Bean 已经被其他配置定义了，可以直接使用 @SpyBean 对这个 Bean 进行包装和监视，达到完成测试的目的。
+
+
+
+#### MockMVC 使用详解
+
+@SpringBootTest 和 @WebMvcTest（MockMVC） 的区别非常容易让人迷惑，造成混用。
+
+<img src="testing-with-spring-boot/image-20200816113608048.png" alt="image-20200816113608048" style="zoom:50%;" />
+
+从上面的图可以看出，MockMVC 的测试更加轻量和简单，但是必要时需要手动 Mock 或者配置一些依赖的 Bean。
+
+should_list_users 测试方法中主要有两部分，一个是对 Mock 的对象给予返回值。另外一个就是发出请求和验证请求。
+
+```java
+this.mvc.perform(get("/users").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+```
+
+这部分的链式调用容易让人迷惑，现在来拆解一下，完成这个过程比较长，相对啰嗦。
+
+```java
+// 1. 构建一个模拟请求，get 方法接受一个请求的路径，并设置 accept 头部值为 application-json
+MockHttpServletRequestBuilder builder = MockMvcRequestBuilders
+        .get("/users")
+        .accept(MediaType.APPLICATION_JSON);
+// 2. 执行这个请求，生成一个 ResultAction
+ResultActions perform = this.mvc.perform(builder);
+// 3. 定义一个匹配器
+ResultMatcher okMatcher = MockMvcResultMatchers.status().isOk();
+// 4. 执行这个匹配器进行断言
+perform.andExpect(okMatcher);
+```
+
+MockHttpServletRequestBuilder 可以创建出 GET、POST、PUT、DELETE 等请求，如果需要在 URL 上带参数可以使用重载方法 get(String urlTemplate, Object... uriVars)。使用 POST 可以通过 content() 方法设置请求的 body 参数，还可以通过 multipart 来设置文件参数，用于测试文件上传功能。
+
+执行构造出来的请求，获得一个 ResultActions 并用于后面的断言，确认测试结果。
+
+执行完成后，断言前使用 ResultMatcher 构造一个匹配器，除了匹配状态外，还可以匹配返回头部、内容。如果是 json 返回内容，还可以使用 jsonpath 来断言 json 数据结构。
+
+
+
+值得一提的是，多次请求之间还可以通过 cookie 的方式传递认证信息，在必要时能用得上。
+
+
+
+### Service 测试
+
+
+
 
 ## 内嵌数据库	
 
 ## 内嵌 Redis
 
 ## 鉴权处理
-
-## 测试分层概念
-
-## 测试服务层
-
-## 测试控制器
-
 
 
 ## 测试工具集
