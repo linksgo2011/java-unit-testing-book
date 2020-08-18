@@ -13,5 +13,6 @@
         <module>stubs</module>
         <module>single</module>
         <module>powermock</module>
+        <module>jmh</module>
     </modules>
 </project>

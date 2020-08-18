@@ -28,8 +28,6 @@ Java 开发中目前最流行的技术栈就是 Spring Boot 了，大部分讲�
 2. 如果是纳入 IOC 容器管理的 Bean 对象，需要使用 Spring Test 的 Runner + Mockito 隔离被测试的对象，这个时候需要启动 Spring 上下文，但是容器中只放了必要的被测试对象。
 3. 依赖非常复杂，Mock 成本很高，或者直接想测试和 Servlet 结合很紧密的代码。例如想要测试 Controller 是否能真正反馈需要的响应，可以使用 Spring Boot Test 这个框架启动一个模拟的 Spring Boot 上下文。不过这个阶段接近于集成测试，Spring Boot 文档中也将这部分内容分为集成测试。
 
-
-
 无论这三种类型如何使用，我们都可以使用 Spring Boot Test Starter 引入需要的测试框架，然后按需取用即可。这三种测试类型，测试的粒度由低到高，同时测试运行的时间也由低到高。
 
 我们需要尽可能的选用低成本测试方法，降低测试运行时间的同时也能减少样板代码。
@@ -420,8 +418,6 @@ Spring Boot 默认支持了坐标为 de.flapdoodle.embed:de.flapdoodle.embed.mon
 Spring Boot 通过 MongoAutoConfiguration 类初始化了内嵌 Mongo 以及 MongoClient 的配置，默认情况下使用随机端口，并对开发人员透明。
 
 如果希望修改端口，可以在测试静态资源下的 yml 文件，修改属性 spring.data.mongodb.port 即可。
-
-
 
 
 
