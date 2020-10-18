@@ -14,5 +14,6 @@
         <module>single</module>
         <module>powermock</module>
         <module>jmh</module>
+        <module>archunit</module>
     </modules>
 </project>
