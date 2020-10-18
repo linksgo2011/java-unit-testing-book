@@ -3,6 +3,7 @@
 - [测试替身: Mock、Spy、Stub](test-double.md)
 - [增强测试: 静态、私有方法处理](power-mock.md)
 - [为 Spring Boot 项目编写测试](testing-with-spring-boot.md)
+- [准备测试数据](prepare-test-data.md)
 - [编写 API 测试](api-testing.md)
 - [微基准性能测试](jmh.md)
 - [测试守护架构](arch-unit.md)

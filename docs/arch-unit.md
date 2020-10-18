@@ -8,26 +8,26 @@
 
 ## 使用合适的包结构
 
-在使用 archunit 之前，我们需要讨论下一些常见的代码分包方式。鉴于微服务和单体下组织代码的背景不同，每种微服务的分包也不同，这里按照单体系统下的结构说明。
+在使用 ArchUnit 之前，我们需要讨论下一些常见的代码分包方式。鉴于微服务和单体下组织代码的背景不同，每种微服务的分包也不同，这里按照单体系统下的结构说明。
 
 Java 应用项目中一般有两种组织代码的方式。一种是，按照 "大平层" 的风格，即将同一类代码放到一个包中，比如 Service、Repository；还有一种是按照业务模块划分，每个模块下有自己的 “大平层”。
 
 另外，还有两种代码分层的方式。一种是 MVC 风格的三层结构，分为 Controller、Service、Model 和 View；另外一种是 DDD 的四层结构，分为 Interface、Application、Domain、Infrastructure。
 
-通过这两个维度会有 4 中包组织的方式，下面一一说明。
+通过这两个维度会有 4 种包组织的方式，下面一一说明。
 
 ### MVC 大平层分包
 
 <img src="arch-unit/image-20201018162154743.png" alt="image-20201018162154743" style="zoom:50%;" />
 
-这是一种最简单的分包方式，按照最开始 MVC 模式的逻辑，业务应该写在 Controller 中。但是着前后端分离的发展，View 层消失了，在 Spring Boot 等框架中 Controller  通过 Restful 的注解代替了 View 层的逻辑。
+这是一种最简单的分包方式，按照最开始 MVC 模式的逻辑，业务应该写在 Controller 中。但是着前后端分离的发展，View 层消失了，在 Spring Boot 等框架中 Controller  通过 Restful 的注解代替了 View 层的逻辑，主流的做法是将业务逻辑写在 Service 中。
 
 为了保持架构整洁，这种分包结构下需要有如下简单规则：
 
 1. 相同类型的文件放到相同的包中。
 2. 上层对象可以依赖下层对象，禁止反向依赖。
 3. Request 对象只能在 Controller 中使用，为了保持 Service 层的复用性，不允许在 Service 中引用 Controller 层的任何类。
-4. 不建议将 Model 直接作为 Response 用于接口的数据输出。
+4. 不建议将 Model 直接作为 Response 用于接口的数据输出，而应该转换为特定的 DTO 类。
 5. 所有文件需要使用包名作为结尾，例如 UserController、UserService、UserModel、UserDao。
 
 这是一种最简单、清晰的包结构划分，这里还没有涉及枚举、远程调用、工厂、远程调用等更为细节的包结构设计，可以继续按照需要拓展，把握大方向即可。
@@ -95,9 +95,7 @@ DDD 风格的模块分包，也需要遵守一些额外的规则：
 
 ## 使用 ArchUnit 
 
-考虑好分包方式后，我们可以配置 ArchUnit 检查条件和约束规则。我们以 “MVC 大平层分包” 方式为例，说明如何使用 archunit 对包结构进行检查。当然不使用 ArchUnit 我们也可以通过团队契约、多模块的项目涉及，对团队开发做出一些约束。
-
-
+考虑好分包方式后，我们可以配置 ArchUnit 检查条件和约束规则。我们以 “MVC 大平层分包” 方式为例，说明如何使用 ArchUnit 对包结构进行检查。当然不使用 ArchUnit 我们也可以通过团队契约、多模块的项目涉及，对团队开发做出一些约束。
 
 ### ArchUnit 的原理
 
@@ -140,7 +138,7 @@ ArchUnit 支持不同的测试框架，这里使用 Junit 4。
 
 <img src="arch-unit/image-20201018180040956.png" alt="image-20201018180040956" style="zoom:50%;" />
 
-然后在对应的测试目录下，编写一个测试类 ArchUnitTest。编写一个测试限制类名，例如所有的 Controller 文件必须以 Controller 结束。
+然后在对应的测试目录下，编写一个测试类 ArchUnitTest。编写一个测试用于限制类名，例如所有的 Controller 文件必须以 Controller 结束：
 
 ```java
 @Test
@@ -167,12 +165,14 @@ classes().that().resideInAPackage("..controller")
             .check(importedClasses);
 ```
 
-上面的一样代码就是一个典型的规则，使用 ArchUnit 只需要编写这些规则即可。这是一个典型的链式风格的 API。其中：
+上面的一样代码就是一个典型的规则，使用 ArchUnit 只需要编写这些规则即可。这是一个典型的链式风格的 API，其中：
 
 - that() 后面代表需要筛选那些符合规则的类，ArchUnit 提供了大量的筛选器，比如类型、是否使用了某种注解。
 - should() 接断言规则，比如类名规则、依赖规则等。
 
-大部分基本规则都可以使用 classes() 来声明，classes() 是 lang 层的工具方法。接下来我们来实现 MVC 分层架构的依赖检查，可以用到 libary 包中的预定义规则方法 layeredArchitecture()。
+classes() 是 lang 层的工具方法，用于声明基本的规则，大部分基本规则都可以使用 classes() 来声明。
+
+接下来我们来实现 MVC 分层架构的依赖检查，可以用到 libary 包中的预定义规则方法 layeredArchitecture()。
 
 ```java
 @Test
@@ -192,4 +192,8 @@ public void should_obey_MVC_architecture_rule() {
 
 ![layer check](arch-unit/layer-check.png)
 
-官网使用了一张图来说明三层架构下的依赖关系。
+官网使用了一张图来说明三层架构下的依赖关系，下层类只允许被上层调用，从而守护代码的架构。
+
+最后，官网的代码示例存在一些未更新的情况，如果按照官网的说明不能运行，可以参考我的代码示例。
+
+https://github.com/linksgo2011/java-unit-testing-book/tree/master/archunit
