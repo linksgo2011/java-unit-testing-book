@@ -15,5 +15,7 @@
         <module>powermock</module>
         <module>jmh</module>
         <module>archunit</module>
+        <module>loggable</module>
+        <module>contract-testing</module>
     </modules>
 </project>
