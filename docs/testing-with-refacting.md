@@ -384,8 +384,292 @@ public class ProductContractTest {
 
 下面我们介绍一下 Spring Batch 的入门使用方法，以及怎么为迁移脚本编写一个测试，来验证迁移脚本的可靠性。
 
+### Spring Batch 介绍
 
+一个轻量级的，全面的批处理框架，旨在支持开发对企业系统的日常运行至关重要的强大的批处理应用程序。
 
-### 使用 Spring Batch
+Spring Batch 提供了一些编写批处理程序的通用功能，包括日志记录/跟踪、事务管理、作业处理统计信息、作业重启、跳过和资源管理等。它还提供了更高级的类和服务，这些功能将通过优化和分片技术来实现弹性、并行的批量作业。简单以及复杂的大批量批处理作业都可以以高度可扩展的方式利用框架来处理大量信息。
+
+使用 Spring Batch 比其他 ETL 工具的优势在于两个。其一，容易和 Spring 的编程模型匹配，可以充分利用 Spring、Spring Boot 的功能特性编写代码，甚至可以作为多模块项目，引入业务代码的 domain 包。其二，提供了很多通用的批处理编程概念，比如作业、分片模型，可以方便的读取数据源，多线程运行，也可以多机器分片运行。
+
+在项目中经过大量的实践，Spring Batch 是一个简单可靠的批处理框架。但是要掌握它，需要了解一些基本的批处理 “领域概念”。
+
+Spring Batch的一个总体的架构如下：
+
+![img](testing-with-refacting/format,png.png)
+
+Spring Batch 中可以定义多个 Job，并由 JobLauncher 来管理启、停。每个 Job 有多个 Step，这些 step 可以完成不同的阶段任务，可以串行也可以并行执行。每个 Step 需要定义：
+
+- ItemReader 负责读取数据源，可以是数据库表，也可以是文件。Spring Batch 提供了很多内置的 ItemReader。
+- ItemProcessor 负责处理每一条记录，每一个 ItemReader 会读出数据来传递给 ItemProcessor，处理完成后传递给 ItemWriter。
+- ItemWriter 负责写入目标数据源，和 ItemReader 类似。
+
+根据这个模型，开发者在编写大部分批处理应用的时候，只需要通过 Bean 定义 Job、Step、ItemReader、ItemWriter 即可，真正需要做业务转换的代码编写在 ItemProcessor 中。
+
+每一次启动 Job，需要提供参数，这些参数被封装到 JobParameters 中。会生成 JobInstance，每个 JobInstance 有多个 StepInstance ，并存放一些基本数据到 ExecutionContext。最后再由 JobRepository 存储这些批处理个元信息。
+
+![Job Parameters](testing-with-refacting/job-stereotypes-parameters.png)
+
+这些领域知识是为了更好地拓展 Spring Batch 使用的，大部分情况下不需要很复杂就可以配置出需要的脚本。
+
+### Spring Batch 入门
+
+ 我们使用一个很简单的示例来演示怎么创建一个批处理任务，按照老规矩，所有的示例代码都可以在 Github 中找到。
+
+我们的示例目标是将一个 CSV 文件导入到数据库中，实际工作中类似的场景非常多，比如批量注册一组用户等。这个示例无需编写自定义的 Reader 和 Writer，因此主要只有代码非常少。
+
+<img src="testing-with-refacting/image-20201031191716326.png" alt="image-20201031191716326" style="zoom:50%;" />
+
+我们创建一个 SPringBoot 项目，增加依赖，其中测试依赖后面会讲到：
+
+```java
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-batch</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.hsqldb</groupId>
+    <artifactId>hsqldb</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-test</artifactId>
+    <scope>test</scope>
+</dependency>
+<dependency>
+    <groupId>org.springframework.batch</groupId>
+    <artifactId>spring-batch-test</artifactId>
+    <scope>test</scope>
+</dependency>
+```
+
+创建数据库导入文件 schema-all.sql，并增加一个 Person 数据模型：
+
+```sql
+DROP TABLE people IF EXISTS;
+
+CREATE TABLE people  (
+    person_id BIGINT IDENTITY NOT NULL PRIMARY KEY,
+    first_name VARCHAR(20),
+    last_name VARCHAR(20)
+);
+```
+
+```java
+public class Person {
+    private String lastName;
+    private String firstName;
+
+    public Person() {
+    }
+
+    public Person(String firstName, String lastName) {
+        this.firstName = firstName;
+        this.lastName = lastName;
+    }
+ }
+```
+
+测试文件 sample-data.csv：
+
+```text
+Zhang,San
+Li,Si
+Zhou,Wu
+Wang,Liu
+```
+
+接下来就可以开始定义和编排批处理应用了，需要创建一个 BatchConfiguration 文件，来放置各种 Bean，告诉 Spring Batch 如何运作。
+
+```
+@Configuration
+@EnableBatchProcessing // 启用 Spring batch，默认情况下 JOB 会随着应用启动而执行
+public class BatchConfiguration {
+    
+    @Bean
+    public FlatFileItemReader<Person> reader() {
+        return new FlatFileItemReaderBuilder<Person>()
+                .name("personItemReader")
+                .resource(new ClassPathResource("sample-data.csv"))
+                .delimited()
+                .names(new String[]{"firstName", "lastName"})
+                .fieldSetMapper(new BeanWrapperFieldSetMapper<Person>() {{
+                    setTargetType(Person.class);
+                }})
+                .build();
+    }
+
+    @Bean
+    public PersonItemProcessor processor() {
+        return new PersonItemProcessor();
+    }
+
+    @Bean
+    public JdbcBatchItemWriter<Person> writer(DataSource dataSource) {
+        return new JdbcBatchItemWriterBuilder<Person>()
+                .itemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<>())
+                .sql("INSERT INTO people (first_name, last_name) VALUES (:firstName, :lastName)")
+                .dataSource(dataSource)
+                .build();
+    }
+}
+```
+
+先定义 reader、writer、processer 三件套。 FlatFileItemReaderBuilder 为扁平文件 Reader 构建器，传入一些参数构建一个 reader 即可，声明文件字段名称、分隔方式、映射的数据模型类型等信息。JdbcBatchItemWriterBuilder 提供了 JDBC 形式的 writer，声明 SQL 模板即可。
+
+PersonItemProcessor 往往需要自己编写，如果对数据无需任何处理，可以不提供。这里我们编写一个 ItemProcessor，对信息做简单的处理。
+
+```java
+public class PersonItemProcessor implements ItemProcessor<Person, Person> {
+    private static final Logger log = LoggerFactory.getLogger(PersonItemProcessor.class);
+
+    @Override
+    public Person process(final Person person) throws Exception {
+        final String firstName = person.getFirstName().toUpperCase();
+        final String lastName = person.getLastName().toUpperCase();
+
+        final Person transformedPerson = new Person(firstName, lastName);
+
+        return transformedPerson;
+    }
+}
+```
+
+只需要实现 ItemProcessor 接口的 process 方法，如果在这个方法中抛出异常，或者返回为 null，writer 会跳过该条数据。代码编写完毕后，可以启动程序，就会看到 CSV 文件中的数据被导入到了数据库。
+
+编写批处理程序很重要的一件事，是需要验证脚本是否正确，否则会对应用程序带来不小的麻烦。一方面可以为 Spring Batch 脚本编写测试，另一方面也可以通过统计的方式来核对信息。
 
 ### 测试 Spring Batch 脚本
+
+我们来说说，怎么为 Spring Batch 脚本编写测试。网上介绍 Spring Batch 的文章往往忽略了这部分，实际上比较重要，尤其是对一些大型的应用数据迁移来说。
+
+如果细心的话，我们前面引入依赖的时候引入了两个测试的包,分别是 spring-boot-starter-test 和 spring-batch-test。spring-batch-test 提供了很多机制允许我们搭建 Spring Batch 的端到端测试能力，或者每个 Step、Job 单独测试的能力。
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-test</artifactId>
+    <scope>test</scope>
+</dependency>
+<dependency>
+    <groupId>org.springframework.batch</groupId>
+    <artifactId>spring-batch-test</artifactId>
+    <scope>test</scope>
+</dependency>
+```
+
+#### 端到端的 job 的验证
+
+端到端测试 Job 对我们验证 Spring Batch 脚本和调试提供了便利，先看下一个简单的测试类是什么样的。
+
+```java 
+@SpringBatchTest
+@RunWith(SpringRunner.class)
+@ContextConfiguration(classes = {
+        BatchConfiguration.class
+})
+@EnableAutoConfiguration
+public class BatchTest {
+  ……
+}
+```
+
+我们使用了 @SpringBatchTest 为 Spring Batch 的上下文信息提供了测试能力，并使用 SpringRunner 作为测试 Runner。@SpringBatchTest 需要一个 DataSource 来访问 job Instance 的一些信息。要正常运行测试，需要额外配置一个 DataSource。这里我们使用了 @EnableAutoConfiguration，利用 Spring Boot 的自动配置能力，初始话了很多 Bean。
+@ContextConfiguration 声明了需要引入的测试 Job，BatchConfiguration 即为前面我们编写的示例任务。需要注意的是，每个 Configuration 文件中最好只能有一个 Job，如果有多个需要使用 @Primary 注解标记。
+
+接下来我们增加测试，通过 JobLauncherTestUtils 来启动 Job，并获取 jobExecution 的一些信息，来断言 job 的退出代码。
+
+```java 
+@Autowired
+private JobLauncherTestUtils jobLauncherTestUtils;
+
+@Test
+public void testJob() throws Exception {
+    JobExecution jobExecution = jobLauncherTestUtils.launchJob();
+    Assert.assertEquals("COMPLETED", jobExecution.getExitStatus().getExitCode());
+}
+```
+
+为了避免干扰，和其他测试一样，需要清理数据，可以利用 JobRepositoryTestUtils 测试助手提供的能力。
+
+```java
+@After
+public void tearDown() throws Exception {
+    jobRepositoryTestUtils.removeJobExecutions();
+}
+```
+
+如果我们只是对 Job 这样验证是远远不够的，我们还需要对 Step 的很多细节断言，比如执行成功的数量是否和数据库一致等。在这里我们可以通过 jobExecution 获取所有的 steps 信息进行断言，但是当 Step 非常多的时候，编写起来比较繁杂。因此我们可以单独为 step 编写测试，也更容易调试。
+
+#### 为 step 单独编写测试
+
+测试的样板代码一样，只不过换成了 jobLauncherTestUtils.launchStep() 方法来直接启动 step，这样的测试也更具有针对性。
+
+测试方法调整如下：
+
+```java
+@Test
+public void testStep() throws Exception {
+    JobExecution jobExecution = jobLauncherTestUtils.launchStep("step1");
+    Assert.assertEquals("COMPLETED", jobExecution.getExitStatus().getExitCode());
+}
+```
+
+如果只是断言输出的状态，对这个测试而言是远远不够的。我们可以增加更多的断言。jobExecution 中可以获取处理完成的数量和其他信息，因为只启动了一个 Step，可以方便的断言这些信息。
+
+另外，为了验证真实插入数据库的数量，可以使用 JdbcTestUtils 来获取统计信息。因此基本完成的测试如下：
+
+```java
+@SpringBatchTest
+@RunWith(SpringRunner.class)
+@ContextConfiguration(classes = {
+        BatchConfiguration.class
+})
+@EnableAutoConfiguration
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+public class BatchStepTest {
+    @Autowired
+    private JobLauncherTestUtils jobLauncherTestUtils;
+
+    @Autowired
+    private JobRepositoryTestUtils jobRepositoryTestUtils;
+
+    @After
+    public void tearDown() throws Exception {
+        jobRepositoryTestUtils.removeJobExecutions();
+    }
+
+    @Autowired
+    public JdbcTemplate jdbcTemplate;
+
+    @Test
+    public void testStep() throws Exception {
+
+        JobExecution jobExecution = jobLauncherTestUtils.launchStep("step1");
+        jobExecution.getStepExecutions().forEach(stepExecution -> {
+            Assert.assertEquals(4, stepExecution.getWriteCount());
+            Assert.assertEquals(4, stepExecution.getReadCount());
+            Assert.assertEquals(0, stepExecution.getSkipCount());
+
+            Assert.assertEquals(4, JdbcTestUtils.countRowsInTable(jdbcTemplate, "people"));
+        });
+        Assert.assertEquals("COMPLETED", jobExecution.getExitStatus().getExitCode());
+    }
+}
+```
+
+### 测试 reader、writer、processor
+
+Spring Batch 还提供了对 reader、writer 这类 step 范围的对象进行测试。实际上编写自定义的 reader、writer 的情况并不多，并且独立存在意义不大，一般没有为它们编写测试。
+
+但是，我们大量的数据的转换、过滤逻辑在 processor 中，因此对 processor 的测试非常有必要。好在是，processor 是一个纯粹的 bean，不怎么依赖 Spring Batch 测试框架，我们可以像编写单元测试那样容易的为它编写测试。
+
+
+
+### spring Batch 小结
+
+使用 Spring Batch 往往会使用多个数据源，毕竟大部分脚本都用于做 ETL 的工作，会在多个数据源之间捣腾数据。一般来说，Spring Batch 的 job 信息没有那么重要，如果只单机运行，可以直接放到内存数据库中，比较省事儿。如果需要多机运行，或者需要重启 job，那么可以单独配置一个数据源给它。
+
+
+
+
