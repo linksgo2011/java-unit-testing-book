@@ -24,6 +24,7 @@ import javax.sql.DataSource;
 @Configuration
 @EnableBatchProcessing
 public class BatchConfiguration {
+
     @Autowired
     public JobBuilderFactory jobBuilderFactory;
 
