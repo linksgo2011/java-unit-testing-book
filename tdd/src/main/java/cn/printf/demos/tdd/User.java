@@ -1,17 +1,9 @@
 package cn.printf.demos.tdd;
 
 public class User {
-    private String zhName;
     private String cnName;
+    private String enName;
     private String gender;
-
-    public String getZhName() {
-        return zhName;
-    }
-
-    public void setZhName(String zhName) {
-        this.zhName = zhName;
-    }
 
     public String getCnName() {
         return cnName;
@@ -19,6 +11,14 @@ public class User {
 
     public void setCnName(String cnName) {
         this.cnName = cnName;
+    }
+
+    public String getEnName() {
+        return enName;
+    }
+
+    public void setEnName(String enName) {
+        this.enName = enName;
     }
 
     public String getGender() {
