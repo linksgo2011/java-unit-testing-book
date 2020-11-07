@@ -18,5 +18,6 @@
         <module>loggable</module>
         <module>contract-testing</module>
         <module>spring-batch</module>
+        <module>tdd</module>
     </modules>
 </project>
