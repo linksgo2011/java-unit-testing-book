@@ -10,4 +10,4 @@
 - [测试守护遗留系统重建](testing-with-refacting.md)
 - [工程化](test-engine.md)
 - [常见问题](trouble-shooting.md)
-- [参考资料和致谢](references.md)
+- [参考资料](references.md)
